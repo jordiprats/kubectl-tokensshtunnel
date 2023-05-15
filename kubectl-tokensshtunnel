@@ -47,9 +47,11 @@ else
     SUDO_CMD="sudo"
 fi
 
+# setup tunnel
+
 if [ ! -z "${SSH_TUNNEL}" ];
 then
-    nohup $SSH_COMMAND -L "${SSH_TUNNEL}" "sleep 70" >/dev/null &
+    nohup $SSH_COMMAND -L "${SSH_TUNNEL}" "sleep 3660" >/dev/null >/dev/null 2>&1 &
 fi
 
 GET_KUBECONFIG_CMD="$SSH_COMMAND \"$SUDO_CMD cat ${REMOTE_KUBE_CONFIG}\""
