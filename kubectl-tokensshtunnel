@@ -1,0 +1,72 @@
+#!/bin/bash
+
+load_linux() {
+    EXPIRE_TOKEN="$(date -u --date="+1 hour" +"%Y-%m-%dT%H:%M:%SZ")"
+}
+
+load_mac() {
+    EXPIRE_TOKEN="$(date -u -v+1H -j -f "%Y-%m-%dT%H:%M:%SZ" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" +"%Y-%m-%dT%H:%M:%SZ")"
+}
+
+REMOTE_KUBE_CONFIG="/etc/rancher/k3s/k3s.yaml"
+SSH_TUNNEL=""
+
+while getopts 'd:c:k:L:s' OPT; do
+  case $OPT in
+    c)  SSH_COMMAND=$OPTARG;;
+    k)  REMOTE_KUBE_CONFIG=$OPTARG;;
+    L)  SSH_TUNNEL=$OPTARG;;
+    s)  ADD_SUDO="true";;
+    h)  JELP="yes";;
+    *)  JELP="yes";;
+  esac
+done
+
+shift $(($OPTIND - 1))
+
+HELP="
+    usage: $0 -c <cssh command>
+"
+
+if [ "$JELP" = "yes" ]; then
+  echo "$HELP"
+  exit 1
+fi
+
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+case "${OS}" in
+    linux*)     load_linux;;
+    darwin*)    load_mac;;
+    *)          echo "error retrieving arch"; exit 1;;
+esac
+
+if [ -z "$ADD_SUDO" ];
+then
+    SUDO_CMD=" "
+else
+    SUDO_CMD="sudo"
+fi
+
+if [ ! -z "${SSH_TUNNEL}" ];
+then
+    nohup $SSH_COMMAND -L "${SSH_TUNNEL}" "sleep 70" >/dev/null &
+fi
+
+GET_KUBECONFIG_CMD="$SSH_COMMAND \"$SUDO_CMD cat ${REMOTE_KUBE_CONFIG}\""
+
+CCD_DATA="$(sh -c "$GET_KUBECONFIG_CMD" 2>/dev/null | grep client-certificate-data | awk '{ print $2 }' | base64 -d | awk '{ printf "%s\\n",$0 }')"
+CKD_DATA="$(sh -c "$GET_KUBECONFIG_CMD" 2>/dev/null | grep client-key-data | awk '{ print $2 }' | base64 -d | awk '{ printf "%s\\n",$0 }')"
+
+echo "{
+    \"kind\":\"ExecCredential\",
+    \"apiVersion\":\"client.authentication.k8s.io/v1beta1\",
+    \"spec\":{
+        \"interactive\":false
+        },
+    \"status\":{
+        \"expirationTimestamp\":\"${EXPIRE_TOKEN}\",
+        \"clientCertificateData\":\"${CCD_DATA}\",
+        \"clientKeyData\":\"${CKD_DATA}\"
+        }
+    }"
+
