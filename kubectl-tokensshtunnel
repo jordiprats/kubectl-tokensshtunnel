@@ -36,7 +36,7 @@ if [ "$JELP" = "yes" ]; then
   exit 1
 fi
 
-if [ $TMP_CRED == "/" ];
+if [ $TMP_CRED == "/" ] || [ -d $TMP_CRED ];
 then
     echo "WTF: TMP_CRED: $TMP_CRED"
     exit 1
