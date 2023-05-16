@@ -1,5 +1,6 @@
 #!/bin/bash
 
+
 load_linux() {
     EXPIRE_TOKEN="$(date -u --date="+1 hour" +"%Y-%m-%dT%H:%M:%SZ")"
 }
@@ -8,6 +9,7 @@ load_mac() {
     EXPIRE_TOKEN="$(date -u -v+1H -j -f "%Y-%m-%dT%H:%M:%SZ" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" +"%Y-%m-%dT%H:%M:%SZ")"
 }
 
+TMP_CRED="$HOME/.ktst_cache"
 REMOTE_KUBE_CONFIG="/etc/rancher/k3s/k3s.yaml"
 SSH_TUNNEL=""
 
@@ -17,6 +19,7 @@ while getopts 'd:c:k:L:s' OPT; do
     k)  REMOTE_KUBE_CONFIG=$OPTARG;;
     L)  SSH_TUNNEL=$OPTARG;;
     s)  ADD_SUDO="true";;
+    t)  TMPPATTERN=$OPTARG;;
     h)  JELP="yes";;
     *)  JELP="yes";;
   esac
@@ -31,6 +34,12 @@ HELP="
 if [ "$JELP" = "yes" ]; then
   echo "$HELP"
   exit 1
+fi
+
+if [ $TMP_CRED == "/" ];
+then
+    echo "WTF: TMP_CRED: $TMP_CRED"
+    exit 1
 fi
 
 OS=$(uname -s | tr '[:upper:]' '[:lower:]')
@@ -51,7 +60,37 @@ fi
 
 if [ ! -z "${SSH_TUNNEL}" ];
 then
-    nohup $SSH_COMMAND -L "${SSH_TUNNEL}" "sleep 3660" >/dev/null >/dev/null 2>&1 &
+    # 7443:127.0.0.1:6443
+    # 127.0.0.1:7443:127.0.0.1:6443
+    SEPARATORS=$(echo "${SSH_TUNNEL}" | sed 's/:/:\n/g' | wc -l)
+
+    if [ $SEPARATORS -gt 3 ];
+    then
+        LISTEN=$(echo "${SSH_TUNNEL}" | rev | cut -f3- -d: | rev | sed 's/:/ /')
+
+        nc -w 1 -z $LISTEN >/dev/null 2>/dev/null
+
+        if [ $? -ne 0 ];
+        then
+            # spin-up tunnel
+            nohup $SSH_COMMAND -L "${SSH_TUNNEL}" "sleep 3600" >/dev/null >/dev/null 2>&1 &
+            
+            # refresh credentials
+            if [ -f $TMP_CRED ];
+            then
+                rm $TMP_CRED
+            fi
+        fi
+
+        if [ -f $TMP_CRED ];
+        then
+            cat $TMP_CRED
+            exit 0
+        fi 
+    else
+        echo "Error parsing SSH TUNNEL: $SSH_TUNNEL"
+        exit 1
+    fi
 fi
 
 GET_KUBECONFIG_CMD="$SSH_COMMAND \"$SUDO_CMD cat ${REMOTE_KUBE_CONFIG}\""
@@ -70,5 +109,5 @@ echo "{
         \"clientCertificateData\":\"${CCD_DATA}\",
         \"clientKeyData\":\"${CKD_DATA}\"
         }
-    }"
+    }" | tee $TMP_CRED
 
