@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 load_linux() {
     EXPIRE_TOKEN="$(date -u --date="+1 hour" +"%Y-%m-%dT%H:%M:%SZ")"
 }
@@ -9,17 +8,19 @@ load_mac() {
     EXPIRE_TOKEN="$(date -u -v+1H -j -f "%Y-%m-%dT%H:%M:%SZ" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" +"%Y-%m-%dT%H:%M:%SZ")"
 }
 
+MAX_DURATION="3600"
 TMP_CRED="$HOME/.ktst_cache"
 REMOTE_KUBE_CONFIG="/etc/rancher/k3s/k3s.yaml"
 SSH_TUNNEL=""
 
-while getopts 'd:c:k:L:s' OPT; do
+while getopts 'd:t:c:k:L:s' OPT; do
   case $OPT in
     c)  SSH_COMMAND=$OPTARG;;
     k)  REMOTE_KUBE_CONFIG=$OPTARG;;
     L)  SSH_TUNNEL=$OPTARG;;
     s)  ADD_SUDO="true";;
-    t)  TMPPATTERN=$OPTARG;;
+    t)  TMP_CRED=$OPTARG;;
+    d)  MAX_DURATION=$OPTARG;;
     h)  JELP="yes";;
     *)  JELP="yes";;
   esac
@@ -28,10 +29,19 @@ done
 shift $(($OPTIND - 1))
 
 HELP="
-    usage: $0 -c <cssh command>
+    usage: $0 -c <ssh command>
+
+    Options:
+    -c <ssh command>      Set the SSH command to use.
+    -k <kube config>      Set the remote kube config file (default: /etc/rancher/k3s/k3s.yaml).
+    -L <ssh tunnel>       Set the SSH tunnel configuration (format: [<local_bind>:]<local_port>:<remote_host>:<remote_port>).
+    -s                    Add 'sudo' to the SSH command.
+    -t <tmp pattern>      Set the location to store the cached credentials.
+    -d <tunnel duration>  Set the duration for which the tunnel will be available.
+    -h                    Show this help message.
 "
 
-if [ "$JELP" = "yes" ]; then
+if [ "$JELP" = "yes" ] || [ -z "$SSH_COMMAND" ]; then
   echo "$HELP"
   exit 1
 fi
@@ -73,7 +83,7 @@ then
         if [ $? -ne 0 ];
         then
             # spin-up tunnel
-            nohup $SSH_COMMAND -L "${SSH_TUNNEL}" "sleep 3600" >/dev/null >/dev/null 2>&1 &
+            nohup $SSH_COMMAND -L "${SSH_TUNNEL}" "sleep ${MAX_DURATION}" >/dev/null >/dev/null 2>&1 &
             
             # refresh credentials
             if [ -f $TMP_CRED ];
