@@ -27,7 +27,7 @@ To configure your kubeconfig file, add the following configuration to the users 
       args:
       - tokensshtunnel
       - -c
-      - awstools ec2 ssh bastion
+      - ssh bastion
       - -s
       - -L
       - 127.0.0.1:7443:127.0.0.1:6443
